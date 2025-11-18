@@ -53,9 +53,9 @@ public class ProductService
         return sortBy?.ToLower() switch
         {
             "price"     => desc ? query.OrderByDescending(x => x.Price) : query.OrderBy(x => x.Price),
-            "rating"     => desc ? query.OrderByDescending(x => x.Price) : query.OrderBy(x => x.Rating),
-            "createdat"     => desc ? query.OrderByDescending(x => x.Price) : query.OrderBy(x => x.CreatedAt),
-            "name"     => desc ? query.OrderByDescending(x => x.Price) : query.OrderBy(x => x.Name),
+            "rating"     => desc ? query.OrderByDescending(x => x.Rating) : query.OrderBy(x => x.Rating),
+            "createdat"     => desc ? query.OrderByDescending(x => x.CreatedAt) : query.OrderBy(x => x.CreatedAt),
+            "name"     => desc ? query.OrderByDescending(x => x.Name) : query.OrderBy(x => x.Name),
             _ => query.OrderBy(x => x.Name)
         };
     }
@@ -74,5 +74,34 @@ public class ProductService
             .ToListAsync();
 
         return new PagedResult<Product>(items, totalCount, totalPages, pageNumber, pageSize);
+    }
+
+    private async Task<List<Product>> ApplyCursorPagination(
+        IQueryable<Product> query, DateTime? after, int? limit)
+    {
+        if (after.HasValue)
+            query = query.Where(x => x.CreatedAt > after.Value);
+
+        return await query
+            .OrderBy(x => x.CreatedAt)
+            .Take(limit ?? 10)
+            .ToListAsync();
+    }
+
+    public async Task<object> GetProductsAsync(ProductQueryParameters p)
+    {
+        var query = _context.Products.Include(x => x.Category).AsQueryable();
+
+        query = ApplyFiltering(query, p);
+        query = ApplySorting(query, p.SortBy, p.SortOrder);
+
+        // Cursor pagination mode
+        if (p.After.HasValue)
+        {
+            return await ApplyCursorPagination(query, p.After, p.Limit);
+        }
+
+        // Page-based pagination mode
+        return await ApplyPaging(query, p.PageNumber, p.PageSize);
     }
 }
