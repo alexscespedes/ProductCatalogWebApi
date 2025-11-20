@@ -92,6 +92,15 @@ public class ProductService
     {
         var query = _context.Products.Include(x => x.Category).AsQueryable();
 
+        // Search
+        if (!string.IsNullOrWhiteSpace(p.Search))
+        {
+            if (p.WeightedSearch)
+                query = query.ApplyWeightedSearch(p.Search);
+            else
+                query = query.ApplyBasicSearch(p.Search, p);
+        }
+
         query = ApplyFiltering(query, p);
         query = ApplySorting(query, p.SortBy, p.SortOrder);
 

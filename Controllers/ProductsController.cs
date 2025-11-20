@@ -22,5 +22,12 @@ namespace ProductCatalogApi.Controllers
             var result = await _service.GetProductsAsync(parameters);
             return Ok(result);
         }
+
+        [HttpGet("search")]
+        public async Task<IActionResult> Search([FromQuery] ProductQueryParameters parameters)
+        {
+            var result = await _service.GetProductsAsync(parameters);
+            return Ok(result);
+        }
     }
 }
