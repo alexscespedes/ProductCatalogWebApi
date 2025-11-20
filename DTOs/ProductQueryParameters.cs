@@ -4,6 +4,15 @@ namespace ProductCatalogApi.DTOs;
 
 public class ProductQueryParameters
 {
+    // Search
+    public string? Search { get; set; }
+    public bool WeightedSearch { get; set; } = true;
+
+    // Advanced: fields to include
+    public bool includeName { get; set; } = true;
+    public bool includeDescription { get; set; } = true;
+    public bool includeSKU { get; set; } = true;
+
     // Filtering
     public string? Name { get; set; }
     public decimal? MinPrice { get; set; }
