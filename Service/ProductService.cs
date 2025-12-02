@@ -113,4 +113,17 @@ public class ProductService
         // Page-based pagination mode
         return await ApplyPaging(query, p.PageNumber, p.PageSize);
     }
+
+    public IAsyncEnumerable<Product> QueryAsAsyncEnumerable(ProductQueryParameters p)
+    {
+        var query = _context.Products
+            .AsNoTracking()
+            .Include(x => x.Category)
+            .AsQueryable();
+
+        query = ApplyFiltering(query, p);
+        query = ApplySorting(query, p.SortBy, p.SortOrder);
+
+        return query.AsAsyncEnumerable();
+    }
 }
