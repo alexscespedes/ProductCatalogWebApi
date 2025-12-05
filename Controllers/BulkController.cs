@@ -30,7 +30,7 @@ namespace ProductCatalogApi.Controllers
             if (file == null) return BadRequest("File is required");
             if (runInBackground)
             {
-                var jobId = await _importService.EnqueueImportJobAsync(file.OpenReadStream());
+                var jobId = await _importService.QueueImportJobAsync(file.OpenReadStream());
                 return Accepted(new { jobId });
             }
             else
@@ -41,6 +41,15 @@ namespace ProductCatalogApi.Controllers
         }
 
         [HttpGet("import/status/{jobId}")]
-        public IActionResult GetJobStatus(Guid jobId) => Ok(_importService.GetJobStatus(jobId));
+        public IActionResult GetJobStatus(Guid jobId)
+        {
+            var status = _importService.GetJobStatus(jobId);
+
+            if (status == null)
+                return NotFound(new { message = "Job ID not found", jobId });
+
+            return Ok(new { jobId, status });
+        }
+
     }
 }

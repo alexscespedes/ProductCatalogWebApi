@@ -1,0 +1,162 @@
+{
+  "info": {
+    "name": "Product API - Bulk & Exports",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "item": [
+    {
+      "name": "1 - List Products (paged)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/products?pageNumber=1&pageSize=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "products"],
+          "query": [
+            { "key": "pageNumber", "value": "1" },
+            { "key": "pageSize", "value": "10" }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "2 - Search Products",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/products/search?search=wireless&pageNumber=1&pageSize=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "products", "search"],
+          "query": [
+            { "key": "search", "value": "wireless" },
+            { "key": "pageNumber", "value": "1" },
+            { "key": "pageSize", "value": "10" }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "3 - Preview CSV (validate only)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "products_sample.csv"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/bulk/preview",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "bulk", "preview"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "4 - Import CSV (sync) - blocking",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "products_sample.csv"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/bulk/import",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "bulk", "import"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "5 - Import CSV (background)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "products_large.csv"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/bulk/import?runInBackground=true",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "bulk", "import"],
+          "query": [{ "key": "runInBackground", "value": "true" }]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "6 - Check Import Job Status",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/bulk/import/status/{{jobId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "bulk", "import", "status", "{{jobId}}"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "7 - Export CSV (streaming)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "text/csv" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/products/export/csv",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "products", "export", "csv"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "8 - Export Excel",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/products/export/excel",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "products", "export", "excel"]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5010" },
+    { "key": "jobId", "value": "" }
+  ]
+}

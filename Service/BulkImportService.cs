@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Text;
 using CsvHelper;
 using Microsoft.EntityFrameworkCore;
 using ProductCatalogApi.Configuration;
@@ -10,16 +11,42 @@ using ProductCatalogApi.Models;
 
 namespace ProductCatalogApi.Service;
 
-public class BulkImportService
+public class BulkImportService : IBulkImportService
 {
+    private readonly ConcurrentDictionary<Guid, string> _jobStatus = new();
+    private readonly ConcurrentQueue<BackgroundImportJob> _jobQueue = new();
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<BulkImportService> _logger;
-    private readonly ConcurrentDictionary<Guid, string> _jobStatus = new();
 
     public BulkImportService(IServiceScopeFactory scopeFactory, ILogger<BulkImportService> logger)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+
+        Task.Run(ProcessQueueAsync);
+    }
+
+    private async Task ProcessQueueAsync()
+    {
+        while (true)
+        {
+            try
+            {
+                if (_jobQueue.TryDequeue(out var job))
+                {
+                    await ExecuteBackgroundJobAsync(job);
+                }
+                else
+                {
+                    await Task.Delay(300);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Background worker error");
+            }
+        }
     }
 
     // Preview
@@ -46,52 +73,49 @@ public class BulkImportService
     }
 
     // Import
-    public async Task<object> ImportCsvAsync(Stream csvStream, CancellationToken ct = default, int batchSize = 1000)
+    public async Task<int> ImportCsvAsync(Stream csvStream, CancellationToken ct = default)
     {
-        var summary = new
+        using var reader = new StreamReader(csvStream, Encoding.UTF8);
+
+        string? header = await reader.ReadLineAsync();
+        if (header == null) return 0;
+
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var newProducts = new List<Product>();
+
+        while (!reader.EndOfStream)
         {
-            Inserted = 0,
-            Updated = 0,
-            Skipped = 0,
-            Errors = new List<ImportRowResult>()
-        };
+            ct.ThrowIfCancellationRequested();
 
-        using var reader = new StreamReader(csvStream);
-        using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
-        csv.Context.RegisterClassMap<ProductImportMap>();
+            var line = await reader.ReadLineAsync();
+            if (string.IsNullOrWhiteSpace(line)) continue;
 
-        var buffer = new List<ProductImportDto>(batchSize);
-        var rowNum = 0;
+            var parts = line.Split(',');
+            if (parts.Length < 7) continue;
 
-        await foreach (var dto in csv.GetRecordsAsync<ProductImportDto>().WithCancellation(ct))
-        {
-            rowNum++;
-            var errors = new List<string>();
-            ValidateRow(dto, errors);
-            if (errors.Any())
+            var product = new Product
             {
-                summary.Errors.Add(new ImportRowResult { RowNumber = rowNum, Row = dto, IsValid = false, Errors = errors });
-                continue;
-            }
+                SKU = parts[0].Trim(),
+                Name = parts[1].Trim(),
+                Price = decimal.Parse(parts[2], CultureInfo.InvariantCulture),
+                Rating = double.Parse(parts[3], CultureInfo.InvariantCulture),
+                CategoryId = int.Parse(parts[4].Trim()),
+                IsActive = bool.Parse(parts[5]),
+                CreatedAt = DateTime.Parse(parts[6], CultureInfo.InvariantCulture)
+            };
 
-            buffer.Add(dto);
-
-            if (buffer.Count >= batchSize)
-            {
-                var batchResult = await PersistBatchAsync(buffer, ct);
-                summary = new {Inserted = summary.Inserted + batchResult.Inserted, Updated = summary.Updated + batchResult.Updated, Skipped = summary.Skipped + batchResult.Skipped, summary.Errors };
-                buffer.Clear();
-            }
+            newProducts.Add(product);
         }
 
-        if (buffer.Count > 0)
+        if (newProducts.Count > 0)
         {
-            var batchResult = await PersistBatchAsync(buffer, ct);
-            summary = new {Inserted = summary.Inserted + batchResult.Inserted, Updated = summary.Updated + batchResult.Updated, Skipped = summary.Skipped + batchResult.Skipped, summary.Errors };
+            db.Products.AddRange(newProducts);
+            await db.SaveChangesAsync(ct);
         }
 
-        return summary;
-
+        return newProducts.Count;
     }
 
     // Persist a batch
@@ -160,20 +184,48 @@ public class BulkImportService
     }
 
     // Background job
-    public async Task<Guid> EnqueueImportJobAsync(Stream csvStream)
+    
+    public async Task<Guid> QueueImportJobAsync(Stream csvStream, CancellationToken ct = default)
     {
+        var jobId = Guid.NewGuid();
+
         var ms = new MemoryStream();
-        await csvStream.CopyToAsync(ms);
+        await csvStream.CopyToAsync(ms, ct);
         ms.Position = 0;
 
-        var jobId = Guid.NewGuid();
+        var job = new BackgroundImportJob
+        {
+            JobId = jobId,
+            CsvData = ms
+        };
+
         _jobStatus[jobId] = "Queued";
 
-        BackgroundImportQueue.Instance.Enqueue(new BackgroundImportJob { JobId = jobId, CsvData = ms});
+        _jobQueue.Enqueue(job);
+
         return jobId;
     }
 
-    public string GetJobStatus (Guid jobId) => _jobStatus.TryGetValue(jobId, out var s) ? s : "NotFound";
+
+    // public async Task<Guid> EnqueueImportJobAsync(Stream csvStream)
+    // {
+    //     var ms = new MemoryStream();
+    //     await csvStream.CopyToAsync(ms);
+    //     ms.Position = 0;
+
+    //     var jobId = Guid.NewGuid();
+    //     _jobStatus[jobId] = "Queued";
+
+    //     BackgroundImportQueue.Instance.Enqueue(new BackgroundImportJob { JobId = jobId, CsvData = ms});
+    //     return jobId;
+    // }
+
+    public string GetJobStatus (Guid jobId)
+    {
+        return _jobStatus.TryGetValue(jobId, out var status)
+            ? status
+            : "NotFound";
+    }
 
     internal async Task ExecuteBackgroundJobAsync(BackgroundImportJob job, CancellationToken ct = default)
     {

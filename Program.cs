@@ -29,6 +29,12 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    Console.WriteLine("Application Started. Background worker should now be active.");
+});
+
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
